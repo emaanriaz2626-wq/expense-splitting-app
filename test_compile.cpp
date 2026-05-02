@@ -1,5 +1,6 @@
 #include <iostream>
 #include <iomanip>
+
 #include <map>
 #include <string>
 #include <algorithm>
@@ -7,7 +8,100 @@
 #include <limits>
 #include <cmath>
 
-using namespace std;
+using namespace std;\n
+#include <initializer_list>
+
+template <typename T>
+class DynamicArray {
+private:
+    T* data;
+    size_t capacity_;
+    size_t size_;
+
+    void reallocate(size_t new_capacity) {
+        T* new_data = new T[new_capacity];
+        for (size_t i = 0; i < size_; ++i) {
+            new_data[i] = data[i];
+        }
+        delete[] data;
+        data = new_data;
+        capacity_ = new_capacity;
+    }
+
+public:
+    DynamicArray() : data(nullptr), capacity_(0), size_(0) {}
+    
+    DynamicArray(std::initializer_list<T> init) : capacity_(init.size()), size_(init.size()) {
+        if (capacity_ > 0) {
+            data = new T[capacity_];
+            size_t i = 0;
+            for (const T& val : init) {
+                data[i++] = val;
+            }
+        } else {
+            data = nullptr;
+        }
+    }
+
+    DynamicArray(const DynamicArray& other) : capacity_(other.capacity_), size_(other.size_) {
+        if (capacity_ > 0) {
+            data = new T[capacity_];
+            for (size_t i = 0; i < size_; ++i) {
+                data[i] = other.data[i];
+            }
+        } else {
+            data = nullptr;
+        }
+    }
+
+    DynamicArray& operator=(const DynamicArray& other) {
+        if (this != &other) {
+            delete[] data;
+            capacity_ = other.capacity_;
+            size_ = other.size_;
+            if (capacity_ > 0) {
+                data = new T[capacity_];
+                for (size_t i = 0; i < size_; ++i) {
+                    data[i] = other.data[i];
+                }
+            } else {
+                data = nullptr;
+            }
+        }
+        return *this;
+    }
+
+    ~DynamicArray() {
+        delete[] data;
+    }
+
+    void push_back(const T& value) {
+        if (size_ == capacity_) {
+            reallocate(capacity_ == 0 ? 1 : capacity_ * 2);
+        }
+        data[size_++] = value;
+    }
+
+    void erase(T* it) {
+        size_t index = it - data;
+        for (size_t i = index; i < size_ - 1; ++i) {
+            data[i] = data[i + 1];
+        }
+        size_--;
+    }
+
+    size_t size() const { return size_; }
+    bool empty() const { return size_ == 0; }
+
+    T& operator[](size_t index) { return data[index]; }
+    const T& operator[](size_t index) const { return data[index]; }
+
+    T* begin() { return data; }
+    const T* begin() const { return data; }
+    T* end() { return data + size_; }
+    const T* end() const { return data + size_; }
+};
+
 
 // ─── ANSI Color Codes ───────────────────────────────────────────────────────
 #define RESET   "\033[0m"
@@ -20,17 +114,12 @@ using namespace std;
 #define MAGENTA "\033[35m"
 #define CYAN    "\033[36m"
 
-// ─── Limits ─────────────────────────────────────────────────────────────────
-const int MAX_MEMBERS = 100;
-const int MAX_EXPENSES = 1000;
-
 // ─── Data Structures ────────────────────────────────────────────────────────
 struct Expense {
     string description;
     double amount;
     string paidBy;
-    string splitAmong[MAX_MEMBERS];
-    int numSplitAmong; // 0 = split among all
+    DynamicArray<string> splitAmong; // empty = split among all
 };
 
 struct Settlement {
@@ -39,18 +128,9 @@ struct Settlement {
     double amount;
 };
 
-struct SettlementArray {
-    Settlement data[MAX_MEMBERS];
-    int count;
-};
-
 // ─── Global State ────────────────────────────────────────────────────────────
-string members[MAX_MEMBERS];
-int numMembers = 0;
-
-Expense expenses[MAX_EXPENSES];
-int numExpenses = 0;
-
+DynamicArray<string> members;
+DynamicArray<Expense> expenses;
 string groupName = "My Group";
 
 // ─── Utility Functions ───────────────────────────────────────────────────────
@@ -75,10 +155,7 @@ void printHeader() {
 }
 
 bool memberExists(const string& name) {
-    for (int i = 0; i < numMembers; ++i) {
-        if (members[i] == name) return true;
-    }
-    return false;
+    return find(members.begin(), members.end(), name) != members.end();
 }
 
 string trim(const string& s) {
@@ -119,52 +196,39 @@ void pressEnter() {
 // ─── Balance & Settlement Engine ────────────────────────────────────────────
 map<string, double> computeBalances() {
     map<string, double> balance;
-    for (int i = 0; i < numMembers; ++i) balance[members[i]] = 0.0;
+    for (const auto& m : members) balance[m] = 0.0;
 
-    for (int i = 0; i < numExpenses; ++i) {
-        const auto& e = expenses[i];
-        int participantsCount = e.numSplitAmong == 0 ? numMembers : e.numSplitAmong;
-        double share = e.amount / (double)participantsCount;
+    for (const auto& e : expenses) {
+        const auto& participants = e.splitAmong.empty() ? members : e.splitAmong;
+        double share = e.amount / (double)participants.size();
 
         balance[e.paidBy] += e.amount;
-        if (e.numSplitAmong == 0) {
-            for (int j = 0; j < numMembers; ++j)
-                balance[members[j]] -= share;
-        } else {
-            for (int j = 0; j < e.numSplitAmong; ++j)
-                balance[e.splitAmong[j]] -= share;
-        }
+        for (const auto& p : participants)
+            balance[p] -= share;
     }
     return balance;
 }
 
-SettlementArray minimizeSettlements() {
+DynamicArray<Settlement> minimizeSettlements() {
     auto balance = computeBalances();
-    pair<string, double> creditors[MAX_MEMBERS];
-    int numCreditors = 0;
-    pair<string, double> debtors[MAX_MEMBERS];
-    int numDebtors = 0;
+    DynamicArray<pair<string, double>> creditors, debtors;
 
-    for (const auto& kv : balance) {
-        if (kv.second > 0.005) {
-            creditors[numCreditors++] = {kv.first, kv.second};
-        } else if (kv.second < -0.005) {
-            debtors[numDebtors++] = {kv.first, -kv.second};
-        }
+    for (const auto& [name, bal] : balance) {
+        if (bal > 0.005)  creditors.push_back({name, bal});
+        else if (bal < -0.005) debtors.push_back({name, -bal});
     }
 
-    sort(creditors, creditors + numCreditors,
+    sort(creditors.begin(), creditors.end(),
               [](auto& a, auto& b){ return a.second > b.second; });
-    sort(debtors, debtors + numDebtors,
+    sort(debtors.begin(), debtors.end(),
               [](auto& a, auto& b){ return a.second > b.second; });
 
-    SettlementArray settlements;
-    settlements.count = 0;
-    int i = 0, j = 0;
-    while (i < numCreditors && j < numDebtors) {
+    DynamicArray<Settlement> settlements;
+    size_t i = 0, j = 0;
+    while (i < creditors.size() && j < debtors.size()) {
         double amount = min(creditors[i].second, debtors[j].second);
-        settlements.data[settlements.count++] = {debtors[j].first, creditors[i].first,
-                               round(amount * 100.0) / 100.0};
+        settlements.push_back({debtors[j].first, creditors[i].first,
+                               round(amount * 100.0) / 100.0});
         creditors[i].second -= amount;
         debtors[j].second   -= amount;
         if (creditors[i].second < 0.005) ++i;
@@ -197,10 +261,10 @@ void addMember() {
     cout << BOLD << "  Add Member\n" << RESET;
     printLine();
 
-    if (numMembers > 0) {
+    if (!members.empty()) {
         cout << "  Current members:\n";
-        for (int i = 0; i < numMembers; ++i)
-            cout << "    " << CYAN << "· " << members[i] << RESET << "\n";
+        for (const auto& m : members)
+            cout << "    " << CYAN << "· " << m << RESET << "\n";
         cout << "\n";
     }
 
@@ -212,10 +276,8 @@ void addMember() {
     if (name.empty()) return;
     if (memberExists(name)) {
         cout << RED << "\n  '" << name << "' already exists.\n" << RESET;
-    } else if (numMembers >= MAX_MEMBERS) {
-        cout << RED << "\n  Maximum members reached.\n" << RESET;
     } else {
-        members[numMembers++] = name;
+        members.push_back(name);
         cout << GREEN << "\n  " << name << " added.\n" << RESET;
     }
     pressEnter();
@@ -226,39 +288,33 @@ void removeMember() {
     cout << BOLD << "  Remove Member\n" << RESET;
     printLine();
 
-    if (numMembers == 0) {
+    if (members.empty()) {
         cout << YELLOW << "  No members to remove.\n" << RESET;
         pressEnter(); return;
     }
 
-    for (int i = 0; i < numMembers; ++i)
+    for (size_t i = 0; i < members.size(); ++i)
         cout << "  " << CYAN << "[" << i+1 << "]" << RESET
                   << "  " << members[i] << "\n";
     cout << "  " << DIM << "[0]  Cancel\n" << RESET;
 
-    int choice = getInt("\n  Select member: ", 0, numMembers);
+    int choice = getInt("\n  Select member: ", 0, (int)members.size());
     if (choice == 0) return;
 
     string name = members[choice - 1];
 
     bool hasExpenses = false;
-    for (int i = 0; i < numExpenses; ++i) {
-        const auto& e = expenses[i];
+    for (const auto& e : expenses) {
         if (e.paidBy == name) { hasExpenses = true; break; }
-        for (int j = 0; j < e.numSplitAmong; ++j) {
-            if (e.splitAmong[j] == name) { hasExpenses = true; break; }
-        }
-        if (hasExpenses) break;
+        for (const auto& p : e.splitAmong)
+            if (p == name) { hasExpenses = true; break; }
     }
 
     if (hasExpenses) {
         cout << RED << "\n  Cannot remove '" << name
                   << "' - they are part of existing expenses.\n" << RESET;
     } else {
-        for (int i = choice - 1; i < numMembers - 1; ++i) {
-            members[i] = members[i+1];
-        }
-        numMembers--;
+        members.erase(members.begin() + choice - 1);
         cout << GREEN << "\n  " << name << " removed.\n" << RESET;
     }
     pressEnter();
@@ -266,13 +322,13 @@ void removeMember() {
 
 void listMembers() {
     printHeader();
-    cout << BOLD << "  Members (" << numMembers << ")\n" << RESET;
+    cout << BOLD << "  Members (" << members.size() << ")\n" << RESET;
     printLine();
-    if (numMembers == 0) {
+    if (members.empty()) {
         cout << DIM << "  No members yet.\n" << RESET;
     } else {
-        for (int i = 0; i < numMembers; ++i)
-            cout << "  " << CYAN << "· " << RESET << members[i] << "\n";
+        for (const auto& m : members)
+            cout << "  " << CYAN << "· " << RESET << m << "\n";
     }
     pressEnter();
 }
@@ -282,13 +338,8 @@ void addExpense() {
     cout << BOLD << "  Add Expense\n" << RESET;
     printLine();
 
-    if (numMembers < 2) {
+    if (members.size() < 2) {
         cout << YELLOW << "  Add at least 2 members first.\n" << RESET;
-        pressEnter(); return;
-    }
-
-    if (numExpenses >= MAX_EXPENSES) {
-        cout << RED << "  Maximum expenses reached.\n" << RESET;
         pressEnter(); return;
     }
 
@@ -302,10 +353,10 @@ void addExpense() {
     double amount = getDouble("  Amount: $");
 
     cout << "\n  Who paid?\n";
-    for (int i = 0; i < numMembers; ++i)
+    for (size_t i = 0; i < members.size(); ++i)
         cout << "  " << CYAN << "[" << i+1 << "]" << RESET
                   << "  " << members[i] << "\n";
-    int payerIdx = getInt("\n  Payer: ", 1, numMembers);
+    int payerIdx = getInt("\n  Payer: ", 1, (int)members.size());
     string payer = members[payerIdx - 1];
 
     cout << "\n  Split among:\n";
@@ -313,12 +364,10 @@ void addExpense() {
     cout << "  " << CYAN << "[2]" << RESET << "  Select specific people\n";
     int splitMode = getInt("\n  Choice: ", 1, 2);
 
-    string splitAmong[MAX_MEMBERS];
-    int numSplitAmong = 0;
-
+    DynamicArray<string> splitAmong;
     if (splitMode == 2) {
         cout << "\n  Select participants (number then Enter, blank when done):\n";
-        for (int i = 0; i < numMembers; ++i)
+        for (size_t i = 0; i < members.size(); ++i)
             cout << "  " << CYAN << "[" << i+1 << "]" << RESET
                       << "  " << members[i] << "\n";
 
@@ -330,54 +379,43 @@ void addExpense() {
             if (line.empty()) break;
             istringstream ss(line);
             int idx;
-            if (ss >> idx && idx >= 1 && idx <= numMembers) {
+            if (ss >> idx && idx >= 1 && idx <= (int)members.size()) {
                 const string& chosen = members[idx - 1];
-                bool found = false;
-                for (int i = 0; i < numSplitAmong; ++i) {
-                    if (splitAmong[i] == chosen) { found = true; break; }
-                }
-                if (!found) {
-                    splitAmong[numSplitAmong++] = chosen;
+                if (find(splitAmong.begin(), splitAmong.end(), chosen) == splitAmong.end()) {
+                    splitAmong.push_back(chosen);
                     cout << GREEN << "  Added: " << chosen << RESET << "\n";
                 }
             }
         }
-        if (numSplitAmong == 0) {
+        if (splitAmong.empty()) {
             cout << YELLOW << "\n  No one selected - splitting among everyone.\n" << RESET;
         }
     }
 
-    expenses[numExpenses].description = desc;
-    expenses[numExpenses].amount = amount;
-    expenses[numExpenses].paidBy = payer;
-    expenses[numExpenses].numSplitAmong = numSplitAmong;
-    for (int i = 0; i < numSplitAmong; ++i) {
-        expenses[numExpenses].splitAmong[i] = splitAmong[i];
-    }
-    numExpenses++;
+    expenses.push_back({desc, amount, payer, splitAmong});
 
-    int partsCount = numSplitAmong == 0 ? numMembers : numSplitAmong;
-    double share = amount / partsCount;
+    const auto& parts = splitAmong.empty() ? members : splitAmong;
+    double share = amount / parts.size();
 
     cout << GREEN << "\n  Expense added!\n" << RESET;
     cout << DIM << "  $" << fixed << setprecision(2) << amount
               << " paid by " << payer << ", split "
-              << partsCount << " ways ($" << share << " each)\n" << RESET;
+              << parts.size() << " ways ($" << share << " each)\n" << RESET;
     pressEnter();
 }
 
 void listExpenses() {
     printHeader();
-    cout << BOLD << "  Expenses (" << numExpenses << ")\n" << RESET;
+    cout << BOLD << "  Expenses (" << expenses.size() << ")\n" << RESET;
     printLine();
 
-    if (numExpenses == 0) {
+    if (expenses.empty()) {
         cout << DIM << "  No expenses yet.\n" << RESET;
         pressEnter(); return;
     }
 
     double total = 0;
-    for (int i = 0; i < numExpenses; ++i) {
+    for (size_t i = 0; i < expenses.size(); ++i) {
         const auto& e = expenses[i];
         total += e.amount;
 
@@ -386,11 +424,11 @@ void listExpenses() {
         cout << "       " << GREEN << "$" << fixed << setprecision(2)
                   << e.amount << RESET
                   << "  paid by " << YELLOW << e.paidBy << RESET;
-        if (e.numSplitAmong == 0)
+        if (e.splitAmong.empty())
             cout << "  " << DIM << "(all)" << RESET;
         else {
             cout << "  " << DIM << "(";
-            for (int j = 0; j < e.numSplitAmong; ++j) {
+            for (size_t j = 0; j < e.splitAmong.size(); ++j) {
                 if (j) cout << ", ";
                 cout << e.splitAmong[j];
             }
@@ -410,26 +448,23 @@ void removeExpense() {
     cout << BOLD << "  Remove Expense\n" << RESET;
     printLine();
 
-    if (numExpenses == 0) {
+    if (expenses.empty()) {
         cout << YELLOW << "  No expenses to remove.\n" << RESET;
         pressEnter(); return;
     }
 
-    for (int i = 0; i < numExpenses; ++i)
+    for (size_t i = 0; i < expenses.size(); ++i)
         cout << "  " << CYAN << "[" << i+1 << "]" << RESET
                   << "  " << expenses[i].description
                   << "  " << DIM << "($" << fixed << setprecision(2)
                   << expenses[i].amount << ")" << RESET << "\n";
     cout << "  " << DIM << "[0]  Cancel\n" << RESET;
 
-    int choice = getInt("\n  Remove expense: ", 0, numExpenses);
+    int choice = getInt("\n  Remove expense: ", 0, (int)expenses.size());
     if (choice == 0) return;
 
     string name = expenses[choice - 1].description;
-    for (int i = choice - 1; i < numExpenses - 1; ++i) {
-        expenses[i] = expenses[i+1];
-    }
-    numExpenses--;
+    expenses.erase(expenses.begin() + choice - 1);
     cout << GREEN << "\n  Removed: " << name << "\n" << RESET;
     pressEnter();
 }
@@ -439,15 +474,14 @@ void showBalances() {
     cout << BOLD << "  Balances\n" << RESET;
     printLine();
 
-    if (numMembers == 0) {
+    if (members.empty()) {
         cout << DIM << "  No members yet.\n" << RESET;
         pressEnter(); return;
     }
 
     auto balances = computeBalances();
 
-    for (int i = 0; i < numMembers; ++i) {
-        string m = members[i];
+    for (const auto& m : members) {
         double b = balances[m];
         cout << "  " << left << setw(18) << m;
         if (b > 0.005)
@@ -468,19 +502,19 @@ void showSettlements() {
     cout << BOLD << "  Settlement Plan\n" << RESET;
     printLine();
 
-    if (numMembers == 0 || numExpenses == 0) {
+    if (members.empty() || expenses.empty()) {
         cout << DIM << "  Nothing to settle yet.\n" << RESET;
         pressEnter(); return;
     }
 
     auto settlements = minimizeSettlements();
 
-    if (settlements.count == 0) {
+    if (settlements.empty()) {
         cout << GREEN << "  Everyone is settled up!\n" << RESET;
     } else {
-        cout << "  " << settlements.count << " payment(s) needed:\n\n";
-        for (int i = 0; i < settlements.count; ++i) {
-            const auto& s = settlements.data[i];
+        cout << "  " << settlements.size() << " payment(s) needed:\n\n";
+        for (size_t i = 0; i < settlements.size(); ++i) {
+            const auto& s = settlements[i];
             cout << "  " << i+1 << ". "
                       << YELLOW << s.from << RESET
                       << "  ->  "
@@ -499,23 +533,23 @@ void showSummary() {
     printLine();
 
     double total = 0;
-    for (int i = 0; i < numExpenses; ++i) total += expenses[i].amount;
+    for (const auto& e : expenses) total += e.amount;
 
     cout << "  Group:    " << CYAN << groupName << RESET << "\n";
-    cout << "  Members:  " << CYAN << numMembers << RESET << "\n";
-    cout << "  Expenses: " << CYAN << numExpenses << RESET << "\n";
+    cout << "  Members:  " << CYAN << members.size() << RESET << "\n";
+    cout << "  Expenses: " << CYAN << expenses.size() << RESET << "\n";
     cout << "  Total:    " << GREEN << "$" << fixed
               << setprecision(2) << total << RESET << "\n";
 
-    if (numMembers > 0 && total > 0) {
+    if (!members.empty() && total > 0) {
         cout << "  Per head: " << YELLOW << "$"
                   << fixed << setprecision(2)
-                  << total / numMembers << RESET << "\n";
+                  << total / members.size() << RESET << "\n";
     }
 
-    if (numExpenses > 0) {
+    if (!expenses.empty()) {
         map<string, double> paid;
-        for (int i = 0; i < numExpenses; ++i) paid[expenses[i].paidBy] += expenses[i].amount;
+        for (const auto& e : expenses) paid[e.paidBy] += e.amount;
         auto top = max_element(paid.begin(), paid.end(),
                    [](auto& a, auto& b){ return a.second < b.second; });
         cout << "\n  Top payer: " << MAGENTA << top->first
@@ -550,17 +584,12 @@ void showMenu() {
 int main() {
     // Demo data
     groupName = "Weekend Trip";
-    
-    members[0] = "Alice";
-    members[1] = "Bob";
-    members[2] = "Carol";
-    numMembers = 3;
-
-    expenses[0].description = "Hotel"; expenses[0].amount = 300.0; expenses[0].paidBy = "Alice"; expenses[0].numSplitAmong = 0;
-    expenses[1].description = "Dinner"; expenses[1].amount = 90.0; expenses[1].paidBy = "Bob"; expenses[1].numSplitAmong = 0;
-    expenses[2].description = "Taxi"; expenses[2].amount = 45.0; expenses[2].paidBy = "Carol"; 
-    expenses[2].splitAmong[0] = "Alice"; expenses[2].splitAmong[1] = "Carol"; expenses[2].numSplitAmong = 2;
-    numExpenses = 3;
+    members = {"Alice", "Bob", "Carol"};
+    expenses = {
+        {"Hotel", 300.0, "Alice", {}},
+        {"Dinner", 90.0, "Bob", {}},
+        {"Taxi", 45.0, "Carol", {"Alice", "Carol"}}
+    };
 
     while (true) {
         showMenu();
