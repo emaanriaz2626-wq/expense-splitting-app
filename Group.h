@@ -4,13 +4,14 @@
 #include "ExpenseTypes.h"
 #include "Utilities.h"
 
+//represents a group of people sharing expenses
 class Group {
 private:
     string groupName;
     string inviteCode;
 
     vector<string> members;
-    vector<Expense*> expenses;
+    vector<Expense*> expenses; //stores different expense types via pointers
 
 public:
     Group(){}
@@ -32,8 +33,9 @@ public:
 
     vector<string>& getMembers(){
         return members;
-    } //composition access
+    }
 
+    //check if someone's already in the group
     bool memberExists(string name){
         for(int i=0;i<members.size();i++)
             if(members[i]==name) return true;
@@ -56,6 +58,7 @@ public:
     vector<Expense*>& getExpenses(){
         return expenses;
     }
+    //display all expenses in the group
     void showExpenses() {
         printLine();
         cout << BOLD << "Expenses\n" << RESET;
@@ -68,11 +71,12 @@ public:
 
         for (int i = 0; i < expenses.size(); i++){
             cout << i + 1 << ". ";
-            expenses[i]->display();
+            expenses[i]->display(); //calls the right version via polymorphism
             cout << "\n";
         }
     }
 
+    //run through all expenses and tally up who owes what
     vector<float> calculateBalances(){
         vector<float> balances(members.size(), 0);
 
@@ -83,6 +87,7 @@ public:
         return balances;
     }
 
+    //show each member's net balance
     void showBalances() {
         vector<float> balances = calculateBalances();
 
@@ -107,6 +112,7 @@ public:
         }
     }
 
+    //figure out who pays who to settle all debts
     void settleUp() {
         vector<float> balances = calculateBalances();
 
@@ -117,12 +123,12 @@ public:
         bool settled = true;
 
         for (int i = 0; i < members.size(); i++){
-            if (balances[i] < 0){
+            if (balances[i] < 0){ //this person owes money
                 for (int j = 0; j < members.size(); j++) {
-                    if (balances[j] > 0){
+                    if (balances[j] > 0){ //this person is owed money
                         float amount = min(-balances[i], balances[j]);
 
-                        if (amount > 0.01){
+                        if (amount > 0.01){ //skip tiny amounts
                             cout<<YELLOW<<members[i]<<RESET<<" pays "<<GREEN<<members[j]<<RESET<<" $"<<fixed<<setprecision(2)<<amount<< "\n";
 
                             balances[i] += amount;
@@ -137,7 +143,7 @@ public:
             cout << GREEN << "Everyone is settled up!\n" << RESET;
         }
     }
-    ~Group(){ //cleanup memory
+    ~Group(){ //cleanup dynamically allocated expenses
         for(int i=0;i<expenses.size();i++){
             delete expenses[i];
         }

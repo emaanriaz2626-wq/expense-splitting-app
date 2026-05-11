@@ -7,6 +7,7 @@
 
 using namespace std;
 
+//base class for all expense types
 class Expense {
 protected:
     string description;
@@ -28,7 +29,7 @@ public:
 
     virtual string getType() const=0;
 
-    virtual ~Expense(){} //virtual destructor
+    virtual ~Expense(){} //virtual destructor for safe cleanup
 };
 
 #endif

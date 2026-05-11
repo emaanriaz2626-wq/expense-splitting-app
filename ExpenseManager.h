@@ -4,11 +4,12 @@
 #include "FileManager.h"
 #include "Utilities.h"
 
+//handles user interaction
 class ExpenseManager{
 private:
     vector<User> users;
     vector<Group> groups;
-    string currentUser;
+    string currentUser; //who's logged in right now
 
 public:
 void loadData(){
@@ -33,7 +34,7 @@ void mainMenu(){
 
         cout<<CYAN<<"[1] "<<RESET<<"Register\n";
         cout<<CYAN<<"[2] "<<RESET<<"Login\n";
-        cout<<CYAN<< "[0] "<<RESET<<"Exit\n";
+        cout<<CYAN <<"[0] "<<RESET<<"Exit\n";
 
         int choice = getInt("\nChoice: ", 0, 2);
         switch(choice){
@@ -57,7 +58,7 @@ void mainMenu(){
         }
     }
 }
-//Register
+//creates a new account
 void registerUser(){
 
     clearScreen();
@@ -77,7 +78,7 @@ void registerUser(){
     cout << GREEN << "\nAccount created successfully!\n" << RESET;
     pressEnter();
 }
-//Login
+//checks credentials and logs in
 bool loginUser(){
 
     clearScreen();
@@ -109,7 +110,7 @@ bool loginUser(){
 
     return false;
 }
-//Dashboard
+//menu after login
 void dashboard(){
 
     while (true) {
@@ -119,7 +120,7 @@ void dashboard(){
         printLine('=');
         cout<<BOLD<<CYAN<<"  DASHBOARD"<<RESET<<"\n";
         printLine('=');
-        cout<<"Logged in as: "<<YELLOW<<currentUser<<RESET<< "\n\n";
+        cout<<"Logged in as: "<<YELLOW<<currentUser<<RESET <<"\n\n";
 
         cout<<CYAN<<"[1] "<<RESET<<"Create Group\n";
         cout<<CYAN<<"[2] "<<RESET<<"Join Group\n";
@@ -133,11 +134,11 @@ void dashboard(){
         case 1: createGroup(); break;
         case 2: joinGroup(); break;
         case 3: openGroup(); break;
-        case 0: return;
+        case 0: return; //logout
         }
     }
 }
-//Create group
+//sets up a new group with an invite code
 void createGroup(){
 
     clearScreen();
@@ -153,14 +154,14 @@ void createGroup(){
     getline(cin, code);
 
     Group g(name, code);
-    g.addMember(currentUser);
+    g.addMember(currentUser); //creator joins automatically
     groups.push_back(g);
 
     saveData();
     cout << GREEN << "\nGroup created!\n" << RESET;
     pressEnter();
 }
-//Join group
+//join an existing group using its code
 void joinGroup(){
 
     clearScreen();
@@ -186,7 +187,7 @@ void joinGroup(){
     cout<<RED<<"\nInvalid code.\n"<<RESET;
     pressEnter();
 }
-//Open Group
+//pick a group to open
 void openGroup() {
     clearScreen();
     if (groups.size() == 0) {
@@ -206,7 +207,7 @@ void openGroup() {
     int choice = getInt("\nSelect group: ", 1, groups.size());
     groupMenu(groups[choice-1]);
 }
-//Group menu
+//inside a specific group
 void groupMenu(Group& g){
 
     while (true){
@@ -258,7 +259,7 @@ void groupMenu(Group& g){
         }
     }
 }
-//Add expense
+//walks user through adding an expense to the group
 void addExpenseToGroup(Group& g){
 
     clearScreen();
@@ -275,6 +276,7 @@ void addExpenseToGroup(Group& g){
     amount = getFloat("Amount: $");
     vector<string>& members = g.getMembers();
 
+    //ask who paid
     cout << "\nWho paid?\n";
     for (int i = 0; i < members.size(); i++) {
         cout << CYAN << "[" << i + 1 << "] " << RESET
@@ -284,6 +286,7 @@ void addExpenseToGroup(Group& g){
     int payerIndex = getInt("\nChoice: ", 1, members.size());
     string payer = members[payerIndex - 1];
 
+    //choose how to split
     cout<<"\nSplit Type\n";
     cout<<CYAN<<"[1] "<<RESET<<"Equal\n";
     cout<<CYAN<<"[2] "<< RESET<<"Percent\n";
@@ -298,6 +301,7 @@ void addExpenseToGroup(Group& g){
     else if(type == 2){
         vector<float> perc;
 
+        //get each person's percentage
         for (int i = 0; i < members.size(); i++)
             perc.push_back(getFloat(members[i] + ": "));
 
@@ -307,6 +311,7 @@ void addExpenseToGroup(Group& g){
     else{
         vector<float> exact;
 
+        //get each person's exact amount
         for (int i = 0; i < members.size(); i++)
             exact.push_back(getFloat(members[i] + ": $"));
 

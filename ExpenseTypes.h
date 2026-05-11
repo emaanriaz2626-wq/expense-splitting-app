@@ -2,6 +2,7 @@
 #define EXPENSE_TYPES_H
 
 #include "Expense.h"
+#include <stdexcept>
 
 //colors for CLI
 #define RESET "\033[0m"
@@ -19,11 +20,13 @@ public:
 
     void calculate(vector<string>& members,vector<float>& balances){
 
-        float share=amount/participants.size(); //equal split logic
+        float share=amount/participants.size(); //split evenly among all
 
+        //credit the payer
         for(int i=0;i<members.size();i++)
             if(members[i]==paidBy) balances[i]+=amount;
 
+        //deduct each person's share
         for(int i=0;i<participants.size();i++)
             for(int j=0;j<members.size();j++)
                 if(participants[i]==members[j]) balances[j]-=share;
@@ -45,13 +48,20 @@ private:
 
 public:
     PercentExpense(string d,float a,string p,vector<string> people,vector<float> perc)
-    :Expense(d,a,p){participants=people;percentages=perc;}
+    :Expense(d,a,p){
+        participants=people;percentages=perc;
+        float total=0;
+        for(int i=0;i<perc.size();i++) total+=perc[i];
+        if(total<99.9||total>100.1) throw runtime_error("Percentages must add up to 100"); //validate input
+    }
 
     void calculate(vector<string>& members,vector<float>& balances){
 
+        //credit the payer
         for(int i=0;i<members.size();i++)
             if(members[i]==paidBy) balances[i]+=amount;
 
+        //deduct each person's percentage
         for(int i=0;i<participants.size();i++){
             float share=amount*percentages[i]/100;
 
@@ -78,13 +88,20 @@ private:
 
 public:
     ExactExpense(string d,float a,string p,vector<string> people,vector<float> exact)
-    :Expense(d,a,p){participants=people;exactAmounts=exact;}
+    :Expense(d,a,p){
+        participants=people;exactAmounts=exact;
+        float total=0;
+        for(int i=0;i<exact.size();i++) total+=exact[i];
+        if(total<a-0.01||total>a+0.01) throw runtime_error("Exact amounts must add up to the total"); //validate input
+    }
 
     void calculate(vector<string>& members,vector<float>& balances){
 
+        //credit the payer
         for(int i=0;i<members.size();i++)
             if(members[i]==paidBy) balances[i]+=amount;
 
+        //deduct each person's exact amount
         for(int i=0;i<participants.size();i++)
             for(int j=0;j<members.size();j++)
                 if(participants[i]==members[j]) balances[j]-=exactAmounts[i];
